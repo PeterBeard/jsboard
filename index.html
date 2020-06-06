@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+    <head>
+        <title>jsBoard - JavaScript Aircraft Boarding Simulator</title>
+        <style type="text/css">
+         body {
+             font: 18px/22px 'MS Sans Serif', Arial, sans-serif;
+             margin: 0;
+             padding: 0;
+         }
+         h1 {
+             padding-left: 1em;
+         }
+         #controls {
+             width: 72em;
+             margin: 0 auto;
+         }
+         fieldset {
+             border: 1px solid #ddd;
+             background: #f8f8f8 none;
+             width: 33em;
+             float: left;
+             margin: 0 0.5em;
+             padding: 0.5em;
+         }
+         .hidden {
+             display: none;
+         }
+        </style>
+    </head>
+    <body>
+        <h1>jsBoard &mdash; JavaScript Aircraft Boarding Simulator</h1>
+        <canvas id="simulation" width="1800" height="500"></canvas>
+        <div id="controls">
+            <p id="status"></p>
+            <form id="parameters">
+                <fieldset>
+                    <legend>Aircraft Parameters</legend>
+                    <select id="layout_preset">
+                        <option value="a321">Airbus A321</option>
+                        <option value="b757300">Boeing 757-300</option>
+                        <option value="crj700">Bombardier CRJ-700</option>
+                        <option value="coords">Custom rows + columns</option>
+                        <!--<option value="custom">Custom seat layout (JSON)</option>-->
+                    </select>
+                    <p id="row_col_params" class="hidden">
+                        <label for="rows">Rows <input size="1" maxlength="3" type="text" id="rows" value="22"></label>
+                        <label for="cols">Columns <input size="1" maxlength="3" type="text" id="cols" value="3"></label>
+                    </p>
+                    <button id="render_button">Render Aircraft</button>
+                </fieldset>
+                <fieldset>
+                    <legend>Simulation Parameters</legend>
+                    <p><label for="method_btf">Back-to-front <input type="radio" value="btf" name="method" id="method_btf" checked="checked"></label></p>
+                    <p><label for="method_ftb">Front-to-back <input type="radio" value="ftb" name="method" id="method_ftb"></label></p>
+                    <p><label for="method_rand">Random <input type="radio" value="random" name="method" id="method_rand"></label></p>
+                    <p>
+                        <label for="time_step">Simulation Time Step (ms) <input type="text" id="time_step" value="100"></label>
+                    </p>
+                    <button id="simulate_button" type="submit">Run Simulation</button>
+                </fieldset>
+                <br style="clear:both;">
+            </form>
+        </div>
+        <script type="text/javascript" src="board.js"></script>
+    </body>
+</html>
