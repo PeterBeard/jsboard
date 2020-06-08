@@ -300,6 +300,9 @@ class Aircraft {
         this.y = 0;
         this.width = 0;
         this.height = 0;
+        // Keep track of which rows and columns are present
+        this.rows = new Set();
+        this.cols = new Set();
     }
 
     /**
@@ -308,7 +311,21 @@ class Aircraft {
      */
     addCell(newCell) {
         this.grid.push(newCell);
+        if (newCell.row) {
+            this.rows.add(newCell.row);
+        }
+        if (newCell.col) {
+            this.cols.add(newCell.col);
+        }
         this.updateBoundingBox();
+    }
+
+    get rowCount() {
+        return this.rows.size;
+    }
+
+    get colCount() {
+        return this.cols.size;
     }
 
     /**
@@ -601,9 +618,109 @@ function clearCanvas() {
 }
 
 /**
+ * Put a set of passengers in back-to-front order
+ * @param{Array} passengers The list of passengers to arrange
+ * @param{Aircraft} aircraft The aircraft to load
+ */
+function arrangeBackFront(passengers, aircraft) {
+    return passengers;
+}
+
+/**
+ * Put a set of passengers in front-to-back order
+ * @param{Array} passengers The list of passengers to arrange
+ * @param{Aircraft} aircraft The aircraft to load
+ */
+function arrangeFrontBack(passengers, aircraft) {
+    return passengers.reverse();
+}
+
+/**
+ * Put a set of passengers in random order
+ * @param{Array} passengers The list of passengers to arrange
+ * @param{Aircraft} aircraft The aircraft to load
+ */
+function arrangeRandom(passengers, aircraft) {
+    shuffleArray(passengers);
+    return passengers;
+}
+
+/**
+ * Put a set of passengers in order for boarding according to Steffen (2008)
+ *
+ * This method orders passengers from back to front, every other row, on
+ * alternate sides of the aircraft, from the outside in. There's a good diagram
+ * in the original paper but here's a very simple example:
+ *
+ * 6  2  5  1
+ * 14 10 13 9
+ *
+ * 16 12 15 11
+ * 8  4  7  3
+ * @param{Array} passengers The list of passengers to arrange
+ * @param{Aircraft} aircraft The aircraft to load
+ */
+function arrangeSteffen(passengers, aircraft) {
+    const seatMap = {};
+    for (const p of passengers) {
+        seatMap[p.targetSeat.toString()] = p;
+    }
+
+    // Iterate from the outside to the inside of the plane
+    const sortedPassengers = new Array();
+    let rightCol = 0;
+    let leftCol = aircraft.colCount - 1;
+    while (leftCol >= rightCol) {
+        // Iterate over the rows from the back of the plane to the front
+        const rightColName = String.fromCharCode(65 + rightCol);
+        const leftColName = String.fromCharCode(65 + leftCol);
+        for (let row = aircraft.rowCount; row > 0; row-=2) {
+            let seat = row + rightColName;
+            let passenger = seatMap[seat];
+            if (passenger !== undefined) {
+                sortedPassengers.push(seatMap[seat]);
+            }
+            console.log('R Boarding ' + seat);
+            if (leftCol !== rightCol) {
+                seat = row + leftColName;
+                console.log('L Boarding ' + seat);
+                passenger = seatMap[seat];
+                if (passenger !== undefined) {
+                    sortedPassengers.push(seatMap[seat]);
+                }
+            }
+        }
+        for (let row = aircraft.rowCount - 1; row > 0; row-=2) {
+            let seat = row + rightColName;
+            console.log('R Boarding ' + seat);
+            let passenger = seatMap[seat];
+            if (passenger !== undefined) {
+                sortedPassengers.push(seatMap[seat]);
+            }
+            if (leftCol !== rightCol) {
+                seat = row + leftColName;
+                console.log('L Boarding ' + seat);
+                passenger = seatMap[seat];
+                if (passenger !== undefined) {
+                    sortedPassengers.push(seatMap[seat]);
+                }
+            }
+        }
+        console.log('--');
+        // Move in towards the center of the aircraft
+        leftCol--;
+        rightCol++;
+    }
+    sortedPassengers.reverse();
+    console.log(sortedPassengers);
+    return sortedPassengers;
+}
+
+/**
  * Run a passenger boarding simulation using the given status object so we can communicate with this task later
  *
- * NOTE: This is only async so that we can get the timing right; it's kind of gross but this was the only way I could think of to do it
+ * NOTE: This is only async so that we can get the timing right; it's kind of
+ * gross but this was the only way I could think of to do it
  * @param{Object} simStatus The current status of the simulation - we just check this to make sure we don't need to break out of the main loop
  */
 async function simulate(simStatus) {
@@ -614,7 +731,7 @@ async function simulate(simStatus) {
     // Create the aircraft
     const aircraft = generateAircraftFromForm();
     // Generate some passengers to fill the seats
-    const pendingPax = [];
+    let pendingPax = [];
     const activePax = [];
     const paxCount = aircraft.seats.length;
     for (let i = 0; i < paxCount; i++) {
@@ -628,12 +745,16 @@ async function simulate(simStatus) {
     const method = document.querySelector('input[name="method"]:checked').value;
     if (method === 'random') {
         // Randomize the order of the passengers
-        shuffleArray(pendingPax);
+        pendingPax = arrangeRandom(pendingPax, aircraft);
     } else if (method === 'btf') {
-        // Do nothing; back to front is the default
+        // Arrange the passengers back to front
+        pendingPax = arrangeBackFront(pendingPax, aircraft);
     } else if (method === 'ftb') {
-        // Reverse the array
-        pendingPax.reverse();
+        // Arrange the passengers front to back
+        pendingPax = arrangeFrontBack(pendingPax, aircraft);
+    } else if (method === 'steffen') {
+        // Put the passengers in the right order for Steffen loading
+        pendingPax = arrangeSteffen(pendingPax, aircraft);
     } else {
         console.error('Unknown boarding method: ' + method + '; using BTF');
     }
