@@ -168,6 +168,7 @@ class Agent extends Renderable {
             startingCell.contents.add(this);
         }
         this.state = null;
+        this.timeToTransition = 0;
     }
 
     /**
@@ -237,24 +238,34 @@ class Seat extends Cell {
     }
 }
 
+const State = Object.freeze({
+    Seated: 'seated',
+    Searching: 'searching',
+    LoadingUp: 'loading_up',
+    LoadingDown: 'loading_down',
+});
+
+
 class Passenger extends Agent {
-    constructor(cell, targetSeat, color) {
+    constructor(cell, targetSeat, luggageDistribution, color) {
         super(cell, color);
-        this.state = null;
         this.targetSeat = targetSeat;
+        this.luggageDistribution = luggageDistribution;
     }
     simulate(deltaT) {
         // We can model the behavior of passengers surprisingly accurately with just a little state machine
-        if (this.state === 'seated' || this.state === null) {
+        if (this.state === State.Seated || this.state === null) {
             // If we're already in our seat or not in the simulation, don't do anything
             return;
-        } else if (this.state === 'searching') {
+        } else if (this.state === State.Searching) {
             // If we're looking for our seat then check to see if it's next to us,
             // if it's not then move to the next cell
             if (this.cell.up && this.cell.up.row === this.targetSeat.row && this.cell.up.col >= this.targetSeat.col) {
-                this.state = 'found_up';
+                this.state = State.LoadingUp;
+                this.timeToTransition = this.luggageDistribution();
             } else if (this.cell.down && this.cell.down.row === this.targetSeat.row && this.cell.down.col <= this.targetSeat.col) {
-                this.state = 'found_down';
+                this.state = State.LoadingDown;
+                this.timeToTransition = this.luggageDistribution();
             } else {
                 // Move to the right
                 if (this.cell.right) {
@@ -266,15 +277,21 @@ class Passenger extends Agent {
                     console.error('Passenger failed to find seat: ' + this.targetSeat.row + this.targetSeat.col);
                 }
             }
-        } else if (this.state === 'found_up') {
-            this.move(this.cell.up);
-            if (this.cell === this.targetSeat) {
-                this.state = 'seated';
+        } else if (this.state === State.LoadingUp) {
+            this.timeToTransition -= deltaT;
+            if (this.timeToTransition <= 0) {
+                this.move(this.cell.up);
+                if (this.cell === this.targetSeat) {
+                    this.state = State.Seated;
+                }
             }
-        } else if (this.state === 'found_down') {
-            this.move(this.cell.down);
-            if (this.cell === this.targetSeat) {
-                this.state = 'seated';
+        } else if (this.state === State.LoadingDown) {
+            this.timeToTransition -= deltaT;
+            if (this.timeToTransition <= 0) {
+                this.move(this.cell.down);
+                if (this.cell === this.targetSeat) {
+                    this.state = State.Seated;
+                }
             }
         } else {
             console.error('Unhandled state: ' + this.state);
@@ -342,7 +359,7 @@ class Aircraft {
      */
     board(passenger) {
         if (this.startingCell.isEmpty()) {
-            passenger.initializeAt(this.startingCell, 'searching');
+            passenger.initializeAt(this.startingCell, State.Searching);
         } else {
             throw 'Cannot board passenger ' + passenger + '; starting cell is full!';
         }
@@ -722,8 +739,20 @@ function arrangeSteffen(passengers, aircraft) {
  * NOTE: This is only async so that we can get the timing right; it's kind of
  * gross but this was the only way I could think of to do it
  * @param{Object} simStatus The current status of the simulation - we just check this to make sure we don't need to break out of the main loop
+ * @param{Number} tickLengthms The amount of time (in milliseconds) that should pass during each simulation tick - default is 500ms
+ * @return{Number} The number of (simulated) seconds it took to board all of the passengers
  */
-async function simulate(simStatus) {
+async function simulate(simStatus, tickLengthms, luggageDistribution) {
+    if (tickLengthms === undefined) {
+        // Default tick rate is 1 simulation tick = 500 ms
+        tickLengthms = 500;
+    }
+    if (luggageDistribution === undefined) {
+        // By default just use 10 seconds as the average luggage loading time
+        luggageDistribution = function() {
+            return 10000;
+        };
+    }
     setStatus('Starting simulation');
     const canvas = document.getElementById('simulation');
     const ctx = canvas.getContext('2d');
@@ -737,11 +766,11 @@ async function simulate(simStatus) {
     for (let i = 0; i < paxCount; i++) {
         const targetSeat = aircraft.seats[i];
         const color = randomRgbaSkinColor();
-        let pax = new Passenger(null, targetSeat, color);
+        let pax = new Passenger(null, targetSeat, luggageDistribution, color);
         pendingPax.push(pax);
     }
 
-    // See what loading method the user wants to use and rearrange the passengers accordingly
+    // See what boarding method the user wants to use and rearrange the passengers accordingly
     const method = document.querySelector('input[name="method"]:checked').value;
     if (method === 'random') {
         // Randomize the order of the passengers
@@ -776,12 +805,12 @@ async function simulate(simStatus) {
         // Render the simulation and compute the next step for each passenger
         aircraft.render(ctx);
         // If everybody is seated then we're done!
-        if (activePax.filter(p => p.state !== 'seated').length === 0) {
+        if (activePax.filter(p => p.state !== State.Seated).length === 0) {
             setStatus(`All ${paxCount} passengers seated after ${iterCount} iterations`);
             break;
         }
         for (const p of activePax) {
-            p.simulate();
+            p.simulate(tickLengthms);
         }
         iterCount++;
         const elapsed = Date.now() - startTime;
